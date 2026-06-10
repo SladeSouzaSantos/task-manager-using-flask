@@ -2,6 +2,16 @@
 
 {% block content %}
 
+<!-- Search form – always visible -->
+<form method="GET" action="{{ url_for('all_tasks') }}" class="form-inline mb-3">
+    <div class="input-group">
+        <input type="text" name="q" class="form-control" placeholder="Buscar tarefa..." value="{{ search_term or '' }}">
+        <div class="input-group-append">
+            <button class="btn btn-outline-secondary" type="submit">Buscar</button>
+        </div>
+    </div>
+</form>
+
 <!-- View All Tasks -->
 {% if tasks %}
 <table class="table table-bordered">
@@ -30,10 +40,14 @@
     </tbody>
 </table>
 {% else %}
-<legend>No Tasks to Display</legend>
-<p class="text-muted">
-    Click <a href="{{ url_for('add_task') }}">here</a> to Add Task
-</p>
+    {% if search_term %}
+        <legend>Nenhuma tarefa encontrada para "{{ search_term }}".</legend>
+    {% else %}
+        <legend>No Tasks to Display</legend>
+    {% endif %}
+    <p class="text-muted">
+        Click <a href="{{ url_for('add_task') }}">here</a> to Add Task
+    </p>
 {% endif %}
 
 {% endblock %}

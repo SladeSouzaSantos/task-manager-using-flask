@@ -90,8 +90,24 @@ def register():
 @app.route("/all_tasks")
 @login_required
 def all_tasks():
-    tasks = User.query.filter_by(username=current_user.username).first().tasks
-    return render_template('all_tasks.html', title='All Tasks', tasks=tasks)
+    """List all tasks for the logged‑in user.
+
+    If a ``q`` query parameter is supplied, the tasks are filtered by the
+    keyword (case‑insensitive) using ``ilike``. This implements the *search
+    tasks* feature (Task‑03).
+    """
+    # Base query – tasks belonging to the current user
+    user = User.query.filter_by(username=current_user.username).first()
+    query = Task.query.filter_by(user_id=user.id)
+
+    # Optional search term
+    search_term = request.args.get('q', type=str)
+    if search_term:
+        # ``ilike`` provides case‑insensitive LIKE for SQLite and other DBs
+        query = query.filter(Task.content.ilike(f"%{search_term}%"))
+
+    tasks = query.all()
+    return render_template('all_tasks.html', title='All Tasks', tasks=tasks, search_term=search_term)
 
 
 @app.route("/add_task", methods=['POST', 'GET'])
