@@ -1,0 +1,37 @@
+# Excluir arquivos e diretórios desnecessários para a imagem Docker
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.swp
+*.swo
+*.log
+*.sqlite3
+*.db
+.env
+.venv
+venv/
+ENV/
+env/
+.idea/
+.vscode/
+.git/
+.gitignore
+.DS_Store
+# Excluir diretórios de build e distribuição
+build/
+dist/
+*.egg-info/
+# Excluir arquivos de teste e cobertura
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+nosetests.xml
+coverage.xml
+# Excluir arquivos de documentação gerados
+site/
+# Excluir arquivos de CI/CD temporários
+*.log
+# Excluir saída de execução
+output/

@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: task_manager_flask
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    # Persist the SQLite DB (optional) – map a host folder to the container
+    # Uncomment the next line if you want the DB to survive container recreation
+    # - ./todo_project/todo_project/site.db:/app/todo_project/todo_project/site.db
+    restart: unless-stopped
