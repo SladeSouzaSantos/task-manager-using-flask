@@ -1,6 +1,8 @@
 from flask import render_template, url_for, flash, redirect, request
 
 from todo_project import app, db, bcrypt
+# Central logger for activity logging
+from todo_project.logger import logger
 
 # Import the forms
 from todo_project.forms import (LoginForm, RegistrationForm, UpdateUserInfoForm, 
@@ -44,10 +46,14 @@ def login():
         # Check if the user exists and the password is valid
         if user and bcrypt.check_password_hash(user.password, form.password.data):
             login_user(user)
+            # Log successful login
+            logger.info(f"User '{user.username}' logged in successfully")
             task_form = TaskForm()
             flash('Login Successfull', 'success')
             return redirect(url_for('all_tasks'))
         else:
+            # Log failed login attempt (do not log password)
+            logger.warning(f"Failed login attempt for username '{form.username.data}'")
             flash('Login Unsuccessful. Please check Username Or Password', 'danger')
     
     return render_template('login.html', title='Login', form=form)
@@ -55,6 +61,9 @@ def login():
 
 @app.route("/logout")
 def logout():
+    # Log logout before clearing the user session
+    if current_user.is_authenticated:
+        logger.info(f"User '{current_user.username}' logged out")
     logout_user()
     return redirect(url_for('login'))
 
@@ -70,6 +79,8 @@ def register():
         user = User(username=form.username.data, password=hashed_password)
         db.session.add(user)
         db.session.commit()
+        # Log new user registration
+        logger.info(f"New user registered: '{user.username}'")
         flash(f'Account Created For {form.username.data}', 'success')
         return redirect(url_for('login'))
 
@@ -91,6 +102,8 @@ def add_task():
         task = Task(content=form.task_name.data, author=current_user)
         db.session.add(task)
         db.session.commit()
+        # Log task creation
+        logger.info(f"Task created by '{current_user.username}': '{task.content}' (id={task.id})")
         flash('Task Created', 'success')
         return redirect(url_for('add_task'))
     return render_template('add_task.html', form=form, title='Add Task')
@@ -103,8 +116,11 @@ def update_task(task_id):
     form = UpdateTaskForm()
     if form.validate_on_submit():
         if form.task_name.data != task.content:
+            old_content = task.content
             task.content = form.task_name.data
             db.session.commit()
+            # Log task update with old and new content
+            logger.info(f"Task id={task.id} updated by '{current_user.username}' from '{old_content}' to '{task.content}'")
             flash('Task Updated', 'success')
             return redirect(url_for('all_tasks'))
         else:
@@ -121,6 +137,8 @@ def delete_task(task_id):
     task = Task.query.get_or_404(task_id)
     db.session.delete(task)
     db.session.commit()
+    # Log task deletion
+    logger.info(f"Task id={task.id} deleted by '{current_user.username}'")
     flash('Task Deleted', 'info')
     return redirect(url_for('all_tasks'))
 
@@ -130,9 +148,12 @@ def delete_task(task_id):
 def account():
     form = UpdateUserInfoForm()
     if form.validate_on_submit():
-        if form.username.data != current_user.username:  
+        if form.username.data != current_user.username:
+            old_username = current_user.username
             current_user.username = form.username.data
             db.session.commit()
+            # Log username change
+            logger.info(f"User id={current_user.id} changed username from '{old_username}' to '{current_user.username}'")
             flash('Username Updated Successfully', 'success')
             return redirect(url_for('account'))
     elif request.method == 'GET':
@@ -149,6 +170,8 @@ def change_password():
         if bcrypt.check_password_hash(current_user.password, form.old_password.data):
             current_user.password = bcrypt.generate_password_hash(form.new_password.data).decode('utf-8')
             db.session.commit()
+            # Log password change event (do not log the password itself)
+            logger.info(f"User '{current_user.username}' changed password")
             flash('Password Changed Successfully', 'success')
             redirect(url_for('account'))
         else:
