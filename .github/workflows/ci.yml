@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # 0️⃣ Verify commit messages follow Conventional Commits (allow Portuguese)
+      # -----------------------------------------------------------------
+      - name: Set up Node (for commitlint)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install commitlint
+        run: |
+          npm install --no-save @commitlint/cli @commitlint/config-conventional
+
+      - name: Lint last commit message
+        # Lint only the most recent commit (works for push and PR events)
+        run: |
+          npx commitlint --from=HEAD~1 --to=HEAD || {
+            echo "\nCommit message does not follow Conventional Commits format."
+            exit 1
+          }
+
+      # -----------------------------------------------------------------
+      # 1️⃣ Determine a short version identifier (commit SHA) to tag artefacts
+      # -----------------------------------------------------------------
+      - name: Set version variable
+        id: version
+        run: |
+          echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          # Add your test command here, e.g., pytest
+          echo "No tests defined. Skipping."
+
+      - name: Run Bandit security scan
+        uses: mdegans/bandit-action@v2
+        with:
+          path: .
+
+      - name: OWASP Dependency-Check
+        uses: dependency-check/gh-action@v2
+        with:
+          project: "task-manager-using-flask"
+          path: .
+          format: "HTML"
+          failOnCVSS: 7
+
+      - name: Upload Dependency-Check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: dependency-check-report.html
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------
+      # 2️⃣ Build and push Docker image (only on main/master branches)
+      # -----------------------------------------------------------------
+      - name: Build and push Docker image to GHCR
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:latest
+
+      # -----------------------------------------------------------------
+      # 3️⃣ ZAP – Dynamic Application Security Testing (DAST)
+      # -----------------------------------------------------------------
+      - name: Start application container for ZAP scan
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          docker run -d --name zap_target -p 5000:5000 \
+            ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:latest
+
+      - name: Wait for application to be ready
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          for i in {1..30}; do
+            nc -z localhost 5000 && break || sleep 2
+          done
+
+      - name: Run OWASP ZAP baseline scan
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: zaproxy/action-baseline@v0.9.0
+        with:
+          target: http://localhost:5000
+          fail_action: false   # continue even if alerts are found
+          # optional: generate an HTML report
+          # output: zap-report.html
+
+      - name: Upload ZAP report (if generated)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap-report.html
+
+      - name: Stop application container
+        if: always()
+        run: |
+          docker rm -f zap_target
+
+      # -----------------------------------------------------------------
+      # 4️⃣ Deploy‑review – ambiente temporário para revisão manual
+      # -----------------------------------------------------------------
+      - name: Deploy review environment (temporary container)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          docker run -d --name review_app -p 8080:5000 \
+            ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:latest
+        # Exponha a URL para quem for revisar (opcional)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for manual approval (if environment is protected)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: peter-evans/wait-for-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          check-name: "Manual approval"
+          timeout-seconds: 86400   # 24 h
+
+      - name: Stop review environment container
+        if: always()
+        run: |
+          docker rm -f review_app
