@@ -6,20 +6,24 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# ---------------------------------------------------------------------------
+#  Pipeline reorganizado em jobs separados para melhorar a visibilidade
+#  Ordem desejada: Build → Lint → Bandit → Dependency‑Check → Docker Build → ZAP → Deploy‑review
+# ---------------------------------------------------------------------------
+
 jobs:
-  build:
+  # ---------------------------------------------------------------------
+  # 0️⃣ Lint de mensagens de commit (Conventional Commits)
+  # ---------------------------------------------------------------------
+  lint_commit:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full history)
         uses: actions/checkout@v4
         with:
-          # Fetch full history so commitlint can access HEAD~1
           fetch-depth: 0
 
-      # -----------------------------------------------------------------
-      # 0️⃣ Verify commit messages follow Conventional Commits (allow Portuguese)
-      # -----------------------------------------------------------------
-      - name: Set up Node (for commitlint)
+      - name: Set up Node (commitlint)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -29,20 +33,21 @@ jobs:
           npm install --no-save @commitlint/cli @commitlint/config-conventional
 
       - name: Lint last commit message
-        # Lint only the most recent commit (works for push and PR events)
         run: |
           npx commitlint --from=HEAD~1 --to=HEAD || {
             echo "\nCommit message does not follow Conventional Commits format."
             exit 1
           }
 
-      # -----------------------------------------------------------------
-      # 1️⃣ Determine a short version identifier (commit SHA) to tag artefacts
-      # -----------------------------------------------------------------
-      - name: Set version variable
-        id: version
-        run: |
-          echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+  # ---------------------------------------------------------------------
+  # 1️⃣ Testes (placeholder) – depende do lint de commit
+  # ---------------------------------------------------------------------
+  test:
+    needs: lint_commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -59,20 +64,34 @@ jobs:
           # Add your test command here, e.g., pytest
           echo "No tests defined. Skipping."
 
-      # -----------------------------------------------------------------
-      # 3️⃣ Bandit – security scan (script version, avoids external action)
-      # -----------------------------------------------------------------
+  # ---------------------------------------------------------------------
+  # 2️⃣ Bandit security scan – depende dos testes
+  # ---------------------------------------------------------------------
+  bandit:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Bandit
         run: |
           pip install bandit
 
-      - name: Run Bandit security scan (script)
+      - name: Run Bandit security scan
         run: |
           bandit -r . -ll
 
-      # -----------------------------------------------------------------
-      # 4️⃣ Dependency‑Check – script version using Docker image
-      # -----------------------------------------------------------------
+  # ---------------------------------------------------------------------
+  # 3️⃣ OWASP Dependency‑Check – depende do Bandit
+  # ---------------------------------------------------------------------
+  dependency_check:
+    needs: bandit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Run OWASP Dependency‑Check (Docker)
         run: |
           docker pull owasp/dependency-check:latest
@@ -84,12 +103,27 @@ jobs:
             --out "/src/dependency-check-report.html" \
             --failOnCVSS 7
 
-      - name: Upload Dependency-Check report
+      - name: Upload Dependency‑Check report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: dependency-check-report.html
+
+  # ---------------------------------------------------------------------
+  # 4️⃣ Build and push Docker image – depende do Dependency‑Check
+  # ---------------------------------------------------------------------
+  build_image:
+    needs: dependency_check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set version variable
+        id: version
+        run: |
+          echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -101,9 +135,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # -----------------------------------------------------------------
-      # 2️⃣ Build and push Docker image (only on main/master branches)
-      # -----------------------------------------------------------------
       - name: Build and push Docker image to GHCR
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v5
@@ -115,9 +146,16 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:${{ steps.version.outputs.VERSION }}
             ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:latest
 
-      # -----------------------------------------------------------------
-      # 3️⃣ ZAP – Dynamic Application Security Testing (DAST)
-      # -----------------------------------------------------------------
+  # ---------------------------------------------------------------------
+  # 5️⃣ ZAP – Dynamic Application Security Testing – depende da imagem Docker
+  # ---------------------------------------------------------------------
+  zap_scan:
+    needs: build_image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Start application container for ZAP scan
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
@@ -136,9 +174,7 @@ jobs:
         uses: zaproxy/action-baseline@v0.9.0
         with:
           target: http://localhost:5000
-          fail_action: false   # continue even if alerts are found
-          # optional: generate an HTML report
-          # output: zap-report.html
+          fail_action: false
 
       - name: Upload ZAP report (if generated)
         if: always()
@@ -152,22 +188,23 @@ jobs:
         run: |
           docker rm -f zap_target
 
-      # -----------------------------------------------------------------
-      # 4️⃣ Deploy‑review – ambiente temporário para revisão manual
-      # -----------------------------------------------------------------
+  # ---------------------------------------------------------------------
+  # 6️⃣ Deploy‑review – ambiente temporário para revisão manual – depende do ZAP
+  # ---------------------------------------------------------------------
+  deploy_review:
+    needs: zap_scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Deploy review environment (temporary container)
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
           docker run -d --name review_app -p 8080:5000 \
             ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:latest
-        # Exponha a URL para quem for revisar (opcional)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # -----------------------------------------------------------------
-      # 5️⃣ Manual approval (simple pause) – using workflow environment
-      # -----------------------------------------------------------------
-      - name: Request manual approval
+      - name: Request manual approval (placeholder)
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: hmarr/auto-approve-action@v2
         with:

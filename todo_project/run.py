@@ -27,4 +27,6 @@ if __name__ == '__main__':
     # Bind to 0.0.0.0 so the Flask server is reachable from outside the container
     # Bind to all interfaces is required when running inside Docker.
     # nosec B104
-    app.run(host='0.0.0.0', debug=True)
+    # Bind to all interfaces is required when running inside Docker.
+    # The nosec comment tells Bandit to ignore B104 (hardcoded bind to all interfaces).
+    app.run(host='0.0.0.0', debug=True)  # nosec B104
