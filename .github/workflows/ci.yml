@@ -112,7 +112,7 @@ jobs:
             --format "HTML" \
             --out "/src/dependency-check-report.html" \
             --failOnCVSS 7 \
-            --disableNvd
+            -n
 
       - name: Upload Dependency‑Check report
         if: always()
