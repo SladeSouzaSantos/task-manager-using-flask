@@ -168,7 +168,7 @@ jobs:
   # 4️⃣ Build and push Docker image
   # ---------------------------------------------------------------------
   build_image:
-    name: Build and push Docker Image
+    name: Build and Push Docker Image
     needs: dependency_check
     runs-on: ubuntu-latest
     steps:
