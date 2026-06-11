@@ -235,8 +235,12 @@ jobs:
       - name: Initialize Database
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          # Entra no container e força a criação das tabelas via Python
-          docker exec zap_target python -c "from todo_project import db; from todo_project.models import User, Task; from todo_project import app; with app.app_context(): db.create_all()"
+          docker exec zap_target python -c "
+          from todo_project import app, db
+          from todo_project.models import User, Task
+          with app.app_context():
+              db.create_all()
+          "
 
       - name: Wait for application to be ready
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
