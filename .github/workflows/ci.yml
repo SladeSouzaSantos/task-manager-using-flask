@@ -228,7 +228,7 @@ jobs:
         run: |
           # Rodamos com a variável de ambiente para forçar o uso de SQLite temporário
           docker run -d --name zap_target --network=host \
-          -e DATABASE_URL="sqlite:////tmp/test.db" \
+          -e DATABASE_URL="sqlite:///site.db" \
           --user $(id -u):$(id -g) \
           ghcr.io/${{ env.REPO }}:latest
 
