@@ -16,6 +16,7 @@ jobs:
   # 0️⃣ Lint de mensagens de commit (Conventional Commits)
   # ---------------------------------------------------------------------
   lint_commit:
+    name: Lint Conventional Commits
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository (full history)
@@ -43,6 +44,7 @@ jobs:
   # 1️⃣ Testes (placeholder) – depende do lint de commit
   # ---------------------------------------------------------------------
   test:
+    name: Tests (Placeholder)
     needs: lint_commit
     runs-on: ubuntu-latest
     steps:
@@ -68,6 +70,7 @@ jobs:
   # 2️⃣ Bandit security scan – depende dos testes
   # ---------------------------------------------------------------------
   bandit:
+    name: Bandit Security Scan
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -86,6 +89,7 @@ jobs:
   # 3️⃣ OWASP Dependency‑Check – depende do Bandit
   # ---------------------------------------------------------------------
   dependency_check:
+    name: OWASP Dependency‑Check
     needs: bandit
     runs-on: ubuntu-latest
     steps:
@@ -93,15 +97,22 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run OWASP Dependency‑Check (Docker)
+        env:
+          # Optional: provide an NVD API key to avoid rate‑limit issues.
+          # Create a repository secret named NVD_API_KEY with your key.
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           docker pull owasp/dependency-check:latest
-          docker run --rm -v "${{ github.workspace }}:/src" \
+          docker run --rm \
+            -e NVD_API_KEY=${{ secrets.NVD_API_KEY }} \
+            -v "${{ github.workspace }}:/src" \
             owasp/dependency-check:latest \
             --project "task-manager-using-flask" \
             --scan "/src" \
             --format "HTML" \
             --out "/src/dependency-check-report.html" \
-            --failOnCVSS 7
+            --failOnCVSS 7 \
+            --disableNvd
 
       - name: Upload Dependency‑Check report
         if: always()
@@ -114,6 +125,7 @@ jobs:
   # 4️⃣ Build and push Docker image – depende do Dependency‑Check
   # ---------------------------------------------------------------------
   build_image:
+    name: Build and push Docker Image
     needs: dependency_check
     runs-on: ubuntu-latest
     steps:
@@ -150,6 +162,7 @@ jobs:
   # 5️⃣ ZAP – Dynamic Application Security Testing – depende da imagem Docker
   # ---------------------------------------------------------------------
   zap_scan:
+    name: ZAP – Dynamic Application Security Testing
     needs: build_image
     runs-on: ubuntu-latest
     steps:
@@ -192,6 +205,7 @@ jobs:
   # 6️⃣ Deploy‑review – ambiente temporário para revisão manual – depende do ZAP
   # ---------------------------------------------------------------------
   deploy_review:
+    name: Deploy‑Review
     needs: zap_scan
     runs-on: ubuntu-latest
     steps:
