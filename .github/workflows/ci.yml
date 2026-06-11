@@ -114,7 +114,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # CORREÇÃO 1: Mudamos a chave para v2 para descartar o cache com o banco travado
       - name: Cache NVD Vulnerability Database
         uses: actions/cache@v4
         with:
@@ -122,28 +121,38 @@ jobs:
           key: ${{ runner.os }}-odc-data-v2
           restore-keys: |
             ${{ runner.os }}-odc-data-v2
+          # ISSO É OURO: Garante que o banco de dados será salvo no cache
+          # mesmo se o report falhar ou se achar uma vulnerabilidade!
+          save-always: true 
 
       - name: Run OWASP Dependency-Check (Docker)
         env:
             NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
+          # 1. Cria a pasta de dados e a nova pasta de relatórios
           mkdir -p ${{ github.workspace }}/odc-data
+          mkdir -p ${{ github.workspace }}/odc-reports
+          
+          # 2. Dá permissão total para o Docker conseguir escrever dentro delas
           chmod -R 777 ${{ github.workspace }}/odc-data
+          chmod -R 777 ${{ github.workspace }}/odc-reports
+          
           rm -f ${{ github.workspace }}/odc-data/*.lock
           rm -f ${{ github.workspace }}/odc-data/*.lck
           
           docker pull owasp/dependency-check:latest
           
-          # CORREÇÃO: Usando a flag --nvdApiKey explícita no comando da ferramenta
+          # 3. Mapeia a pasta de relatórios e aponta o --out para ela
           docker run --rm \
             -e JAVA_OPTS="-Xmx4096m" \
             -v "${{ github.workspace }}:/src" \
             -v "${{ github.workspace }}/odc-data:/usr/share/dependency-check/data" \
+            -v "${{ github.workspace }}/odc-reports:/reports" \
             owasp/dependency-check:latest \
             --project "task-manager-using-flask" \
             --scan "/src" \
             --format "HTML" \
-            --out "/src/dependency-check-report.html" \
+            --out "/reports/dependency-check-report.html" \
             --nvdApiKey "${NVD_API_KEY}" \
             --failOnCVSS 7
 
@@ -152,7 +161,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
-          path: dependency-check-report.html
+          path: odc-reports/dependency-check-report.html # Atualizado para a nova pasta
 
   # ---------------------------------------------------------------------
   # 4️⃣ Build and push Docker image
