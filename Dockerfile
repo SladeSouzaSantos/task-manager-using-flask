@@ -1,5 +1,3 @@
-# Dockerfile for Task Manager Flask application
-# Use a lightweight Python base image
 FROM python:3.11-slim
 
 # Set environment variables
@@ -11,22 +9,24 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a working directory
-# Set the working directory to the inner Flask project where the code lives
-WORKDIR /app/todo_project
+# 1. Define o diretório de trabalho raiz do container
+WORKDIR /app
 
-# Copy only requirements first for caching
+# 2. Copia os requisitos primeiro (Aproveita o cache do Docker)
 COPY requirements.txt ./
 
-# Install Python dependencies
+# 3. Instala as dependências do Python
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Copy the rest of the application code
+# 4. Copia toda a estrutura do seu projeto local para dentro do /app
 COPY . ./
 
 # Expose the Flask default port
 EXPOSE 5000
 
-# Run the application using the project's entry point (ensures DB init)
+# 5. Entra na pasta correta ANTES de executar o comando final
+WORKDIR /app/todo_project
+
+# 6. Executa o aplicativo (Agora ele vai achar o run.py)
 CMD ["python", "run.py"]
