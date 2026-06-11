@@ -6,10 +6,10 @@ on:
   pull_request:
     branches: [ main, master ]
 
-# ---------------------------------------------------------------------------
-#  Pipeline reorganizado em jobs separados para melhorar a visibilidade
-#  Ordem desejada: Build → Lint → Bandit → Dependency‑Check → Docker Build → ZAP → Deploy‑review
-# ---------------------------------------------------------------------------
+# CONCEDE PERMISSÃO GLOBAL PARA GRAVAR NO GHCR E LER O CÓDIGO
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   # ---------------------------------------------------------------------
@@ -36,12 +36,12 @@ jobs:
       - name: Lint last commit message
         run: |
           npx commitlint --from=HEAD~1 --to=HEAD || {
-            echo "\nCommit message does not follow Conventional Commits format."
+            echo -e "\nCommit message does not follow Conventional Commits format."
             exit 1
           }
 
   # ---------------------------------------------------------------------
-  # 1️⃣ Testes (placeholder) – depende do lint de commit
+  # 1️⃣ Testes (placeholder)
   # ---------------------------------------------------------------------
   test:
     name: Tests (Placeholder)
@@ -63,11 +63,10 @@ jobs:
 
       - name: Run tests
         run: |
-          # Add your test command here, e.g., pytest
-          echo "No tests defined. Skipping."
+            echo "No tests defined. Skipping."
 
   # ---------------------------------------------------------------------
-  # 2️⃣ Bandit security scan – depende dos testes
+  # 2️⃣ Bandit security scan
   # ---------------------------------------------------------------------
   bandit:
     name: Bandit Security Scan
@@ -86,35 +85,32 @@ jobs:
           bandit -r . -ll
 
   # ---------------------------------------------------------------------
-  # 3️⃣ OWASP Dependency‑Check – depende do Bandit
+  # 3️⃣ OWASP Dependency-Check
   # ---------------------------------------------------------------------
   dependency_check:
-    name: OWASP Dependency‑Check
+    name: OWASP Dependency-Check
     needs: bandit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run OWASP Dependency‑Check (Docker)
+      - name: Run OWASP Dependency-Check (Docker)
         env:
-          # Optional: provide an NVD API key to avoid rate‑limit issues.
-          # Create a repository secret named NVD_API_KEY with your key.
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+            NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           docker pull owasp/dependency-check:latest
           docker run --rm \
-            -e NVD_API_KEY=${{ secrets.NVD_API_KEY }} \
+            -e NVD_API_KEY="${NVD_API_KEY}" \
             -v "${{ github.workspace }}:/src" \
             owasp/dependency-check:latest \
             --project "task-manager-using-flask" \
             --scan "/src" \
             --format "HTML" \
             --out "/src/dependency-check-report.html" \
-            --failOnCVSS 7 \
-            -n
+            --failOnCVSS 7
 
-      - name: Upload Dependency‑Check report
+      - name: Upload Dependency-Check report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -122,7 +118,7 @@ jobs:
           path: dependency-check-report.html
 
   # ---------------------------------------------------------------------
-  # 4️⃣ Build and push Docker image – depende do Dependency‑Check
+  # 4️⃣ Build and push Docker image
   # ---------------------------------------------------------------------
   build_image:
     name: Build and push Docker Image
@@ -131,6 +127,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # CORREÇÃO: Transforma dono/repositório em minúsculas para o Docker não quebrar
+      - name: Set lowercase repository name
+        run: |
+          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
       - name: Set version variable
         id: version
@@ -155,41 +156,49 @@ jobs:
           file: Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:latest
+            ghcr.io/${{ env.REPO }}:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ env.REPO }}:latest
 
   # ---------------------------------------------------------------------
-  # 5️⃣ ZAP – Dynamic Application Security Testing – depende da imagem Docker
+  # 5️⃣ ZAP – Dynamic Application Security Testing
   # ---------------------------------------------------------------------
   zap_scan:
-    name: ZAP – Dynamic Application Security Testing
+    name: ZAP Dynamic Security Testing
     needs: build_image
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # CORREÇÃO: Variável minúscula e Login no novo Job
+      - name: Prepare Variables and Login
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Start application container for ZAP scan
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          docker run -d --name zap_target -p 5000:5000 \
-            ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:latest
+          docker run -d --name zap_target -p 5000:5000 ghcr.io/${{ env.REPO }}:latest
 
       - name: Wait for application to be ready
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
+          # Aguarda o serviço responder HTTP 200/302 na porta 5000
           for i in {1..30}; do
-            nc -z localhost 5000 && break || sleep 2
+            curl -s http://localhost:5000 > /dev/null && break || sleep 2
           done
 
+      # CORREÇÃO: Usando IP interno do Docker (172.17.0.1) em vez de localhost
       - name: Run OWASP ZAP baseline scan
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-        uses: zaproxy/action-baseline@v0.9.0
+        uses: zaproxy/action-baseline@v0.14.0 # Atualizado para versão mais recente
         with:
-          target: http://localhost:5000
+          target: http://172.17.0.1:5000
           fail_action: false
 
-      - name: Upload ZAP report (if generated)
+      - name: Upload ZAP report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -202,29 +211,36 @@ jobs:
           docker rm -f zap_target
 
   # ---------------------------------------------------------------------
-  # 6️⃣ Deploy‑review – ambiente temporário para revisão manual – depende do ZAP
+  # 6️⃣ Deploy-review
   # ---------------------------------------------------------------------
   deploy_review:
-    name: Deploy‑Review
+    name: Deploy-Review
     needs: zap_scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Deploy review environment (temporary container)
+      # CORREÇÃO: Variável minúscula e Login no novo Job
+      - name: Prepare Variables and Login
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          docker run -d --name review_app -p 8080:5000 \
-            ghcr.io/${{ github.repository_owner }}/task-manager-using-flask:latest
+          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Request manual approval (placeholder)
+      - name: Deploy review environment
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-        uses: hmarr/auto-approve-action@v2
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker run -d --name review_app -p 8080:5000 ghcr.io/${{ env.REPO }}:latest
+
+      # CORREÇÃO: Removido o auto-approve bot. Apenas simula a espera do ambiente de stage.
+      - name: Environment Details
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          echo "Ambiente de review disponível na porta 8080 do runner."
+          echo "Aguardando verificações..."
 
       - name: Stop review environment container
         if: always()
         run: |
-          docker rm -f review_app
+            docker rm -f review_app
