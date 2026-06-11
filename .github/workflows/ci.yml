@@ -114,14 +114,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # NOVO: Cache do banco de dados do NVD para não baixar tudo do zero sempre
+      - name: Cache NVD Vulnerability Database
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/odc-data
+          key: ${{ runner.os }}-odc-data
+          restore-keys: |
+            ${{ runner.os }}-odc-data
+
       - name: Run OWASP Dependency-Check (Docker)
         env:
             NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
+          # Cria a pasta física onde o banco de dados em cache vai ficar
+          mkdir -p ${{ github.workspace }}/odc-data
+          
           docker pull owasp/dependency-check:latest
+          
+          # NOVO: Adicionado JAVA_OPTS de 4GB de RAM e mapeamento de volume (-v) para os dados do NVD
           docker run --rm \
             -e NVD_API_KEY="${NVD_API_KEY}" \
+            -e JAVA_OPTS="-Xmx4096m" \
             -v "${{ github.workspace }}:/src" \
+            -v "${{ github.workspace }}/odc-data:/usr/share/dependency-check/data" \
             owasp/dependency-check:latest \
             --project "task-manager-using-flask" \
             --scan "/src" \
