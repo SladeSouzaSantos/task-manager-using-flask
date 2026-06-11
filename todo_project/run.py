@@ -27,6 +27,6 @@ def _initialize_database():
 if __name__ == '__main__':
     _initialize_database()
     
-    host = os.getenv('FLASK_RUN_HOST', '0.0.0.0')
+    host = os.getenv('FLASK_RUN_HOST', '0.0.0.0') # nosec B104
     debug = os.getenv('FLASK_DEBUG', 'False') == 'True'
-    app.run(host=host, debug=debug)  # nosec B104
+    app.run(host=host, debug=debug)
