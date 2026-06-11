@@ -28,9 +28,5 @@ COPY . ./
 # Expose the Flask default port
 EXPOSE 5000
 
-# Set Flask environment variables (optional)
-ENV FLASK_APP=run.py
-ENV FLASK_RUN_HOST=0.0.0.0
-
 # Run the application using the project's entry point (ensures DB init)
 CMD ["python", "run.py"]

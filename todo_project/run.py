@@ -8,6 +8,8 @@ table: user`` that occurs when the registration or login forms try to query the
 ``User`` model before the schema has been created.
 """
 
+import os
+
 from todo_project import app, db
 # Import models so that SQLAlchemy is aware of them before ``create_all`` is called.
 from todo_project.models import User, Task  # noqa: F401
@@ -24,9 +26,7 @@ def _initialize_database():
 
 if __name__ == '__main__':
     _initialize_database()
-    # Bind to 0.0.0.0 so the Flask server is reachable from outside the container
-    # Bind to all interfaces is required when running inside Docker.
-    # nosec B104
-    # Bind to all interfaces is required when running inside Docker.
-    # The nosec comment tells Bandit to ignore B104 (hardcoded bind to all interfaces).
-    app.run(host='0.0.0.0', debug=True)  # nosec B104
+    
+    host = os.getenv('FLASK_RUN_HOST', '0.0.0.0')
+    debug = os.getenv('FLASK_DEBUG', 'False') == 'True'
+    app.run(host=host, debug=debug)  # nosec B104
