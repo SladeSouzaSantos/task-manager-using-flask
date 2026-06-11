@@ -57,14 +57,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install dependencies (including pytest)
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest
 
-      - name: Run tests
+      - name: Run pytest
         run: |
-            echo "No tests defined. Skipping."
+          echo "Running pytest..."
+          pytest -q
 
   # ---------------------------------------------------------------------
   # SonarCloud Scan
