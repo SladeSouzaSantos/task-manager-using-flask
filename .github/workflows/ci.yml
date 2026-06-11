@@ -222,20 +222,31 @@ jobs:
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      # CORREÇÃO 1: Usa a rede do host para o ZAP enxergar a aplicação
       - name: Start application container for ZAP scan
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          docker run -d --name zap_target -p 5000:5000 ghcr.io/${{ env.REPO }}:latest
+          docker run -d --name zap_target --network=host ghcr.io/${{ env.REPO }}:latest
 
+      # CORREÇÃO 2: Script robusto que mostra o erro caso o Flask não suba
       - name: Wait for application to be ready
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          # Aguarda o serviço responder HTTP 200/302 na porta 5000
-          for i in {1..30}; do
-            curl -s http://localhost:5000 > /dev/null && break || sleep 2
+          echo "Aguardando o Flask iniciar na porta 5000..."
+          for i in {1..20}; do
+            if curl -s http://localhost:5000 > /dev/null; then
+              echo "🚀 Flask está online e respondendo perfeitamente!"
+              exit 0
+            fi
+            echo "Tentativa $i/20: Aplicativo ainda não respondeu..."
+            sleep 2
           done
+          echo "❌ ERRO: O Flask não ficou pronto a tempo."
+          echo "================ LOGS DO CONTAINER VALIDADOR ================"
+          docker logs zap_target
+          echo "============================================================="
+          exit 1
 
-      # CORREÇÃO: Como a Action usa --network=host, o alvo correto é localhost
       - name: Run OWASP ZAP baseline scan
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: zaproxy/action-baseline@v0.14.0
