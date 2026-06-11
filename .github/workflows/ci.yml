@@ -223,13 +223,21 @@ jobs:
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      # CORREÇÃO 1: Usa a rede do host para o ZAP enxergar a aplicação
       - name: Start application container for ZAP scan
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          docker run -d --name zap_target --network=host ghcr.io/${{ env.REPO }}:latest
+          # Rodamos com a variável de ambiente para forçar o uso de SQLite temporário
+          docker run -d --name zap_target --network=host \
+          -e DATABASE_URL="sqlite:////tmp/test.db" \
+          --user $(id -u):$(id -g) \
+          ghcr.io/${{ env.REPO }}:latest
 
-      # CORREÇÃO 2: Script robusto que mostra o erro caso o Flask não suba
+      - name: Initialize Database
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          # Entra no container e força a criação das tabelas via Python
+          docker exec zap_target python -c "from todo_project import db; from todo_project.models import User, Task; from todo_project import app; with app.app_context(): db.create_all()"
+
       - name: Wait for application to be ready
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
