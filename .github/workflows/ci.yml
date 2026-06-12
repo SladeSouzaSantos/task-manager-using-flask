@@ -68,6 +68,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Install test runner
+        run: |
+          # pytest is not listed in requirements.txt, but is needed for the test job
+          pip install pytest
 
   # ---------------------------------------------------------------------
   # Testes (placeholder)
@@ -84,8 +88,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      # Install project dependencies and pytest (the install job runs on a separate runner)
+      - name: Install dependencies and pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
 
-      # Dependencies are already installed by the "install" job.
       - name: Run pytest
         run: |
           echo "Running pytest..."
