@@ -37,10 +37,30 @@ class UpdateUserInfoForm(FlaskForm):
 
     # Check wheather user already exists in the Database
     def validate_username(self, username):
-        if username.data != current_user.username:    
-            user = User.query.filter_by(username=username.data).first()
-            if user:
-                raise ValidationError('Username Exists')
+        """Validate that the new username does not already exist.
+
+        The test suite creates a form instance outside of a Flask request
+        context, which means ``current_user`` is an ``AnonymousUser`` without a
+        ``username`` attribute. The previous guard prevented the conflict check
+        entirely, causing the ``test_update_user_info_conflict`` test to fail.
+
+        The new logic always queries the database for a user with the supplied
+        username. If such a user exists we raise ``ValidationError`` **unless**
+        the request context is active, the user is authenticated, and the found
+        user is the same as the current user (i.e., the user is keeping their
+        own username unchanged).
+        """
+        existing_user = User.query.filter_by(username=username.data).first()
+        if not existing_user:
+            return
+
+        # If we have an authenticated user in the request context, allow the
+        # case where the existing user is the same as the current user.
+        if getattr(current_user, "is_authenticated", False):
+            if getattr(current_user, "id", None) == getattr(existing_user, "id", None):
+                return
+
+        raise ValidationError('Username Exists')
 
 
 class UpdateUserPassword(FlaskForm):

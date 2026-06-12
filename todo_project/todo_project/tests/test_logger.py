@@ -1,6 +1,7 @@
 import logging
 import pytest
-from todo_project import logger as task_logger
+# Import the *logger object* defined in todo_project/logger.py
+from todo_project.logger import logger as task_logger
 
 class DummyHandler(logging.Handler):
     """A simple logging handler that stores emitted records in a list."""

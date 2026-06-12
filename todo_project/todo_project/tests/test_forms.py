@@ -13,7 +13,7 @@ from wtforms import ValidationError
 # RegistrationForm
 # ---------------------------------------------------------------------
 
-def test_registration_form_duplicate_username(make_user):
+def test_registration_form_duplicate_username(make_user, app):
     # cria usuário existente
     make_user(username='existing', password='pwd')
     form = RegistrationForm(data={
@@ -25,7 +25,7 @@ def test_registration_form_duplicate_username(make_user):
     with pytest.raises(ValidationError):
         form.validate_username(form.username)
 
-def test_registration_form_success():
+def test_registration_form_success(app):
     form = RegistrationForm(data={
         'username': 'newuser',
         'password': 'Secret123',
@@ -37,7 +37,7 @@ def test_registration_form_success():
 # LoginForm
 # ---------------------------------------------------------------------
 
-def test_login_form_valid():
+def test_login_form_valid(app):
     form = LoginForm(data={
         'username': 'anyuser',
         'password': 'anypwd',
@@ -67,7 +67,7 @@ def test_update_user_info_success(make_user, auth_client, app):
 # UpdateUserPassword – only field validation (DataRequired)
 # ---------------------------------------------------------------------
 
-def test_update_user_password_fields():
+def test_update_user_password_fields(app):
     form = UpdateUserPassword(data={
         'old_password': 'oldpwd',
         'new_password': 'newpwd',
@@ -78,10 +78,10 @@ def test_update_user_password_fields():
 # TaskForm and UpdateTaskForm – basic validation
 # ---------------------------------------------------------------------
 
-def test_task_form_valid():
+def test_task_form_valid(app):
     form = TaskForm(data={'task_name': 'Minha tarefa'})
     assert form.validate()
 
-def test_update_task_form_valid():
+def test_update_task_form_valid(app):
     form = UpdateTaskForm(data={'task_name': 'Tarefa atualizada'})
     assert form.validate()
