@@ -205,7 +205,7 @@ jobs:
   # ---------------------------------------------------------------------
   build_image:
     name: Build and Push Docker Image
-    needs: dependency_check
+    needs: [test, bandit, dependency_check]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
