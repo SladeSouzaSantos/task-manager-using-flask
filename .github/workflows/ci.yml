@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------
-  # 0️⃣ Lint de mensagens de commit (Conventional Commits)
+  # Lint de mensagens de commit (Conventional Commits)
   # ---------------------------------------------------------------------
   lint_commit:
     name: Lint Conventional Commits
@@ -42,7 +42,7 @@ jobs:
           }
 
   # ---------------------------------------------------------------------
-  # 1️⃣ Install Dependencies (Python)
+  # Install Dependencies (Python)
   # ---------------------------------------------------------------------
   install:
     name: Install Dependencies
@@ -124,7 +124,8 @@ jobs:
   # ---------------------------------------------------------------------
   bandit:
     name: Bandit Security Scan
-    needs: test
+    # Executa em paralelo com os testes, precisando apenas do código fonte.
+    needs: [lint_commit, install]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -139,11 +140,12 @@ jobs:
           bandit -r . -ll
 
   # ---------------------------------------------------------------------
-  # 3️⃣ OWASP Dependency-Check
+  # OWASP Dependency-Check
   # ---------------------------------------------------------------------
   dependency_check:
     name: OWASP Dependency-Check
-    needs: bandit
+    # Também pode ser executado em paralelo com os testes e o Bandit.
+    needs: [lint_commit, install]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -199,7 +201,7 @@ jobs:
           path: odc-reports/dependency-check-report.html # Atualizado para a nova pasta
 
   # ---------------------------------------------------------------------
-  # 4️⃣ Build and push Docker image
+  # Build and push Docker image
   # ---------------------------------------------------------------------
   build_image:
     name: Build and Push Docker Image
@@ -241,7 +243,7 @@ jobs:
             ghcr.io/${{ env.REPO }}:latest
 
   # ---------------------------------------------------------------------
-  # 5️⃣ ZAP – Dynamic Application Security Testing
+  # ZAP – Dynamic Application Security Testing
   # ---------------------------------------------------------------------
   zap_scan:
     name: ZAP Dynamic Security Testing
@@ -303,7 +305,7 @@ jobs:
           docker rm -f zap_target
 
   # ---------------------------------------------------------------------
-  # 6️⃣ Deploy-review
+  # Deploy-review
   # ---------------------------------------------------------------------
   deploy_review:
     name: Deploy-Review
