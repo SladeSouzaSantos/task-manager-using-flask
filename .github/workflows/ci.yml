@@ -42,11 +42,10 @@ jobs:
           }
 
   # ---------------------------------------------------------------------
-  # Testes (placeholder)
+  # 1️⃣ Install Dependencies (Python)
   # ---------------------------------------------------------------------
-  test:
-    name: Tests (Placeholder)
-    needs: lint_commit
+  install:
+    name: Install Dependencies
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -57,12 +56,36 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies (including pytest)
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
 
+  # ---------------------------------------------------------------------
+  # Testes (placeholder)
+  # ---------------------------------------------------------------------
+  test:
+    name: Tests (Placeholder)
+    needs: [lint_commit, install]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Dependencies are already installed by the "install" job.
       - name: Run pytest
         run: |
           echo "Running pytest..."
