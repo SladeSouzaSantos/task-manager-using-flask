@@ -89,13 +89,13 @@ jobs:
       - name: Run Bandit security scan (JSON)
         continue-on-error: true
         run: |
-          # Gera o relatório em JSON, que é suportado por todas as versões do Bandit
-          python3 -m bandit -r . -f json -o bandit-results.json
+          # Rodamos o bandit e ignoramos o código de saída 1 (que indica vulnerabilidades encontradas)
+          python3 -m bandit -r . -f json -o bandit-results.json || true
 
       - name: Convert JSON to SARIF
         run: |
-          # Converte o relatório JSON para o formato exigido pelo GitHub
-          sarif-convert bandit-results.json -o bandit-results.sarif
+          # Chamamos o módulo via python3 -m, que sempre funciona se o pacote estiver instalado
+          python3 -m sarif_tools.convert bandit-results.json -o bandit-results.sarif
 
       - name: Check if the bandit-results.sarif file was created
         run: ls -lh bandit-results.sarif
