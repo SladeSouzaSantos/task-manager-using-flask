@@ -118,6 +118,7 @@ infra/prometheus/data/
 infra/loki/data/
 infra/promtail/data/
 infra/grafana/grafana.db
+infra/alertmanager/telegram_token.txt
 
 # Spyder project settings
 .spyderproject

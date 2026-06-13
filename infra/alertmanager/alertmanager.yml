@@ -11,6 +11,6 @@ route:
 receivers:
   - name: 'telegram_alerta'
     telegram_configs:
-      - bot_token: '8470682706:AAHjST701KQifeF1NFVTcqQpVOkSYsY9-1M'
+      - bot_token_file: '/etc/alertmanager/telegram_token.txt'
         chat_id: 1613621889
         parse_mode: 'HTML'
