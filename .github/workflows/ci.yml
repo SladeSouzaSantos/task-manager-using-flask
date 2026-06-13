@@ -82,28 +82,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo pip install --upgrade bandit sarif-tools
-
-      - name: Run Bandit security scan (JSON)
-        continue-on-error: true
-        run: |
-          # Rodamos o bandit e ignoramos o código de saída 1 (que indica vulnerabilidades encontradas)
-          python3 -m bandit -r . -f json -o bandit-results.json || true
-
-      - name: Convert JSON to SARIF
-        run: |
-          # Chamamos o módulo via python3 -m, que sempre funciona se o pacote estiver instalado
-          python3 -m sarif_tools.convert bandit-results.json -o bandit-results.sarif
-
-      - name: Check if the bandit-results.sarif file was created
-        run: ls -lh bandit-results.sarif
-
-      - name: Upload Bandit Bug Findings to GitHub Cyber Security
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Perform Bandit Analysis
+        uses: PyCQA/bandit-action@v1
         with:
-          sarif_file: ${{ github.workspace }}/bandit-results.sarif
+          exit_zero: true
 
   # ---------------------------------------------------------------------
   # OWASP Dependency-Check
