@@ -117,6 +117,7 @@ infra/grafana/data/
 infra/prometheus/data/
 infra/loki/data/
 infra/promtail/data/
+infra/grafana/grafana.db
 
 # Spyder project settings
 .spyderproject
