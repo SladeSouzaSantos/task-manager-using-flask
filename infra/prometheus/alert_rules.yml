@@ -1,0 +1,82 @@
+groups:
+  - name: task_manager_alerts
+    rules:
+      # -------------------------------------------------
+      # 1 – Alta taxa de erro 5xx (ex.: login falho)
+      # -------------------------------------------------
+      - alert: High5xxErrorRate
+        expr: |
+          sum(rate(flask_http_requests_status_total{status=~"5.."}[5m]))
+          /
+          sum(rate(flask_http_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alta taxa de erros 5xx"
+          description: "A taxa de respostas 5xx está acima de 5 % nos últimos 5 min."
+
+      # -------------------------------------------------
+      # 2 – Latência média acima de 1 s
+      # -------------------------------------------------
+      - alert: HighRequestLatency
+        expr: |
+          avg(rate(flask_http_request_duration_seconds_sum[5m]))
+          /
+          avg(rate(flask_http_request_duration_seconds_count[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latência alta nas requisições"
+          description: "A latência média das requisições HTTP está acima de 1 s."
+
+      # -------------------------------------------------
+      # 3 – Uso de CPU do processo Flask > 80 %
+      # -------------------------------------------------
+      - alert: HighCPUUsage
+        expr: |
+          process_cpu_seconds_total{job="task_manager_flask"} > 0.8
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Uso de CPU alto"
+          description: "O processo Flask está usando mais de 80 % da CPU."
+
+      # -------------------------------------------------
+      # 4 – Memória residente > 200 MiB
+      # -------------------------------------------------
+      - alert: HighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="task_manager_flask"} > 200 * 1024 * 1024
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Uso de memória alto"
+          description: "O processo Flask está usando mais de 200 MiB de RAM."
+
+      # -------------------------------------------------
+      # 5 – Container Offline (Aplicação Caiu)
+      # -------------------------------------------------
+      - alert: TaskManagerDown
+        expr: up{job="task-manager-flask"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instância do Flask caiu"
+          description: "O Prometheus não consegue acessar a aplicação task-manager-flask."
+
+      # -------------------------------------------------
+      # 6 – Container Offline (Infra Caiu)
+      # -------------------------------------------------
+      - alert: InfraestruturaDown
+        expr: up{job="infra-monitoring"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Serviço de Infraestrutura Caiu: {{ $labels.instance }}"
+          description: "O serviço {{ $labels.instance }} parou de responder. O monitoramento pode estar comprometido."

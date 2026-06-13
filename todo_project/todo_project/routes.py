@@ -10,6 +10,13 @@ from todo_project.forms import (LoginForm, RegistrationForm, UpdateUserInfoForm,
 
 # Import the Models
 from todo_project.models import User, Task
+# Import custom Prometheus metrics for business‑logic events
+from todo_project.metrics import (
+    USERS_REGISTERED,
+    TASKS_CREATED,
+    TASKS_COMPLETED,
+    TASKS_ACTIVE,
+)
 
 # Import 
 from flask_login import login_required, current_user, login_user, logout_user
@@ -79,6 +86,8 @@ def register():
         user = User(username=form.username.data, password=hashed_password)
         db.session.add(user)
         db.session.commit()
+        # Increment user registration metric
+        USERS_REGISTERED.inc()
         # Log new user registration
         logger.info(f"New user registered: '{user.username}'")
         flash(f'Account Created For {form.username.data}', 'success')
@@ -124,6 +133,9 @@ def add_task():
         task = Task(content=form.task_name.data, author=current_user)
         db.session.add(task)
         db.session.commit()
+        # Increment task creation counters
+        TASKS_CREATED.labels(user_id=str(current_user.id)).inc()
+        TASKS_ACTIVE.labels(user_id=str(current_user.id)).inc()
         # Log task creation
         logger.info(f"Task created by '{current_user.username}': '{task.content}' (id={task.id})")
         flash('Task Created', 'success')
@@ -158,6 +170,8 @@ def update_task(task_id):
 @login_required
 def delete_task(task_id):
     task = Task.query.get_or_404(task_id)
+    # Decrement active task gauge for the owner of the task
+    TASKS_ACTIVE.labels(user_id=str(task.author.id)).dec()
     db.session.delete(task)
     db.session.commit()
     # Log task deletion

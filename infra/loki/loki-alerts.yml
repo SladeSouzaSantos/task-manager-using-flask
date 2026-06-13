@@ -1,0 +1,62 @@
+groups:
+  - name: task_manager_log_alerts
+    rules:      
+      - alert: FlaskHigh5xxLogRate
+        expr: |
+          sum by (container) (
+            count_over_time({container="task_manager_flask", level="error"}[5m])
+          ) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Muitos erros 5xx nos logs do Flask"
+          description: "O container task_manager_flask está gerando erros 5xx nos últimos 5 min."
+      
+      - alert: FlaskFailedLogin
+        expr: |
+          sum by (container) (
+            count_over_time({container="task_manager_flask", msg=~".*Failed login.*"}[5m])
+          ) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tentativa de login falha"
+          description: "O Flask registrou tentativas de login falhas nos últimos minutos."
+      
+      - alert: FlaskUnhandledException
+        expr: |
+          sum by (container) (
+            count_over_time({container="task_manager_flask", level="error", msg=~".*Traceback.*"}[5m])
+          ) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Exceção não tratada no Flask"
+          description: "Um traceback apareceu nos logs do Flask."
+
+      - alert: PossibleBruteForceAttack
+        expr: |
+          sum by (container) (
+            count_over_time({container="task_manager_flask", msg=~".*Failed login.*"}[1m])
+          ) > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Possível Ataque de Força Bruta detectado"
+          description: "Múltiplas tentativas de login falhas registradas no último minuto no container {{ $labels.container }}."
+
+      - alert: DatabaseConnectionLost
+        expr: |
+          sum by (container) (
+            count_over_time({container="task_manager_flask", msg=~".*psycopg2\\.OperationalError.*|.*Connection refused.*|.*sqlite3\\.OperationalError.*|.*database is locked.*"}[2m])
+          ) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Falha de comunicação com o Banco de Dados"
+          description: "O Flask relatou erros de conexão no banco (Postgres ou SQLite). Verifique os logs do container."

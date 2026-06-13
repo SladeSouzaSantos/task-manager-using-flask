@@ -1,0 +1,16 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: 'telegram_alerta'  # Mudamos o receiver padrão
+  group_by: ['alertname', 'job']
+  group_wait: 10s              # Reduzi para 10s para testes rápidos
+  group_interval: 5m
+  repeat_interval: 1h
+
+receivers:
+  - name: 'telegram_alerta'
+    telegram_configs:
+      - bot_token: '8470682706:AAHjST701KQifeF1NFVTcqQpVOkSYsY9-1M'
+        chat_id: 1613621889
+        parse_mode: 'HTML'
