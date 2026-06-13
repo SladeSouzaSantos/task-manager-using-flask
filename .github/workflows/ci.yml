@@ -89,12 +89,12 @@ jobs:
       - name: Run Bandit security scan
         continue-on-error: true
         run: |
-          bandit -r . -f sarif -o bandit-results.sarif
+          bandit -r . -f sarif -o ${{ github.workspace }}/bandit-results.sarif
 
       - name: Upload Bandit Bug Findings to GitHub Cyber Security
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: bandit-results.sarif
+          sarif_file: ${{ github.workspace }}/bandit-results.sarif
 
   # ---------------------------------------------------------------------
   # OWASP Dependency-Check
