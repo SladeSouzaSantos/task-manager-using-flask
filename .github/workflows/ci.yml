@@ -84,7 +84,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade bandit sarif-tools
+          sudo pip install --upgrade bandit sarif-tools
 
       - name: Run Bandit security scan (JSON)
         continue-on-error: true
