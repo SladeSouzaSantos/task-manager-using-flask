@@ -21,13 +21,16 @@ bcrypt = Bcrypt(app)
 from .metrics import register_metrics, init_business_metrics
 register_metrics(app)
 
+# Import models **before** creating tables so SQLAlchemy knows about them.
+from .models import User, Task
+
 # Ensure the database tables exist and initialise business metrics inside the app context.
 # This prevents OperationalError when the container starts before the DB schema is created.
 with app.app_context():
-	# Create tables if they do not exist yet
-	db.create_all()
-	# Populate gauges/counters with the current DB state (run once at startup)
-	init_business_metrics()
+    # Create tables if they do not exist yet
+    db.create_all()
+    # Populate gauges/counters with the current DB state (run once at startup)
+    init_business_metrics()
 
 # Always put Routes at end
 from todo_project import routes

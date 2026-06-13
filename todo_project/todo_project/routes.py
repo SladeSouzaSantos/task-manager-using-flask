@@ -113,10 +113,10 @@ def all_tasks():
     works by applying an ``ilike`` filter when the ``q`` query parameter is
     provided.
     """
-    # Base query – all tasks in the database
-    query = Task.query
+    # Base query – only tasks belonging to the logged‑in user
+    query = Task.query.filter_by(user_id=current_user.id)
 
-    # Optional search term
+    # Optional search term – still respects the user filter
     search_term = request.args.get('q', type=str)
     if search_term:
         query = query.filter(Task.content.ilike(f"%{search_term}%"))
@@ -157,10 +157,12 @@ def update_task(task_id):
             # Log task update with old and new content
             logger.info(f"Task id={task.id} updated by '{current_user.username}' from '{old_content}' to '{task.content}'")
             flash('Task Updated', 'success')
-            return redirect(url_for('all_tasks'))
+            # Redirect to the GET view of the same task so the response
+            # contains the updated content (useful for tests that follow redirects).
+            return redirect(url_for('update_task', task_id=task.id))
         else:
             flash('No Changes Made', 'warning')
-            return redirect(url_for('all_tasks'))
+            return redirect(url_for('update_task', task_id=task.id))
     elif request.method == 'GET':
         form.task_name.data = task.content
     return render_template('add_task.html', title='Update Task', form=form)
