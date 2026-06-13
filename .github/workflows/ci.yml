@@ -42,10 +42,11 @@ jobs:
           }
 
   # ---------------------------------------------------------------------
-  # Install Dependencies (Python)
+  # Testes (Pytest)
   # ---------------------------------------------------------------------
-  install:
-    name: Install Dependencies
+  test:
+    name: Tests (Pytest)
+    needs: lint_commit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -56,38 +57,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
+      - name: Install dependencies and pytest
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Install test runner
-        run: |
-          # pytest is not listed in requirements.txt, but is needed for the test job
           pip install pytest
-
-  # ---------------------------------------------------------------------
-  # Testes (placeholder)
-  # ---------------------------------------------------------------------
-  test:
-    name: Tests (Placeholder)
-    needs: [lint_commit, install]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
 
       - name: Run pytest
         run: |
@@ -95,31 +69,12 @@ jobs:
           pytest -q
 
   # ---------------------------------------------------------------------
-  # SonarCloud Scan
-  # ---------------------------------------------------------------------
-  #sonarqube:
-  #  name: SonarQube/SonarCloud Scan
-  #  needs: test
-  #  runs-on: ubuntu-latest
-  #  steps:
-  #    - name: Checkout repository
-  #      uses: actions/checkout@v4
-  #      with:
-  #        fetch-depth: 0
-
-  #    - name: SonarCloud Scan
-  #      uses: SonarSource/sonarcloud-github-action@master
-  #      env:
-  #        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  # ---------------------------------------------------------------------
   # Bandit security scan
   # ---------------------------------------------------------------------
   bandit:
     name: Bandit Security Scan
     # Executa em paralelo com os testes, precisando apenas do código fonte.
-    needs: [lint_commit, install]
+    needs: lint_commit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -139,7 +94,7 @@ jobs:
   dependency_check:
     name: OWASP Dependency-Check
     # Também pode ser executado em paralelo com os testes e o Bandit.
-    needs: [lint_commit, install]
+    needs: lint_commit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
