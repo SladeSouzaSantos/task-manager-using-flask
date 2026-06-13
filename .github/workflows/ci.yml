@@ -89,6 +89,7 @@ jobs:
       - name: Run Bandit security scan
         continue-on-error: true
         run: |
+          chmod +x .
           bandit -r . -f sarif -o bandit-results.sarif
 
       - name: Check if the bandit-results.sarif file was created
