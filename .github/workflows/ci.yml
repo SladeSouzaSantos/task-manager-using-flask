@@ -84,13 +84,13 @@ jobs:
 
       - name: Install Bandit
         run: |
-          pip install bandit
+          pip install --upgrade bandit
 
       - name: Run Bandit security scan
         continue-on-error: true
         run: |
           chmod +x .
-          bandit -r . -f sarif -o bandit-results.sarif
+          python3 -m bandit -r . -f sarif -o bandit-results.sarif
 
       - name: Check if the bandit-results.sarif file was created
         run: ls -lh bandit-results.sarif
