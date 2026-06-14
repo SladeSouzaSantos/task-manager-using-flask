@@ -88,25 +88,25 @@ jobs:
       # -------------------------------------------------
       # 1️⃣ Healthchecks básicos de cada serviço
       # -------------------------------------------------
-      - name: Healthcheck Prometheus
+      - name: Healthcheck Prometheus (inside container)
         run: |
-          echo "Verificando health endpoint do Prometheus..."
-          curl -fsSL http://prometheus:9090/-/healthy
+          echo "Verificando health endpoint do Prometheus dentro do container..."
+          docker exec prometheus curl -fsSL http://localhost:9090/-/healthy
 
-      - name: Healthcheck Grafana
+      - name: Healthcheck Grafana (inside container)
         run: |
-          echo "Verificando health endpoint do Grafana..."
-          curl -fsSL http://grafana:3000/api/health
+          echo "Verificando health endpoint do Grafana dentro do container..."
+          docker exec grafana curl -fsSL http://localhost:3000/api/health
 
-      - name: Healthcheck Loki
+      - name: Healthcheck Loki (inside container)
         run: |
-          echo "Verificando ready endpoint do Loki..."
-          curl -fsSL http://loki:3100/ready
+          echo "Verificando ready endpoint do Loki dentro do container..."
+          docker exec loki curl -fsSL http://localhost:3100/ready
 
-      - name: Healthcheck Alertmanager
+      - name: Healthcheck Alertmanager (inside container)
         run: |
-          echo "Verificando status do Alertmanager..."
-          curl -fsSL http://alertmanager:9093/api/v2/status
+          echo "Verificando status do Alertmanager dentro do container..."
+          docker exec alertmanager curl -fsSL http://localhost:9093/api/v2/status
 
       # -------------------------------------------------
       # 2️⃣ Verificar integração Prometheus ↔ Alertmanager
