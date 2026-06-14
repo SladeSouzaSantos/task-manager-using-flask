@@ -63,11 +63,13 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./promtail/promtail-config.yaml:/etc/promtail/config.yaml:ro
       - ./promtail/data:/tmp/promtail
+    ports:
+      - "9080:9080"
     restart: unless-stopped
     networks:
       - tasknet
     depends_on:
-      - loki
+      - loki    
 
   alertmanager:
     image: prom/alertmanager:latest
