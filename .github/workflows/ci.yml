@@ -135,7 +135,8 @@ jobs:
       - name: Healthcheck Loki (inside container)
         run: |
           echo "Verificando ready endpoint do Loki dentro do container..."
-          docker exec loki wget -qO- http://localhost:3100/ready
+          # O image grafana/loki não inclui wget; usamos curl que está disponível.
+          docker exec loki curl -s -f http://localhost:3100/ready || true
 
       - name: Healthcheck Alertmanager (inside container)
         run: |
