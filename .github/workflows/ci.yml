@@ -49,6 +49,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # -------------------------------------------------
+      # 0️⃣ Preparar diretórios de volumes (permite escrita)
+      # -------------------------------------------------
+      - name: Create volume directories and set permissive permissions
+        run: |
+          mkdir -p ./infra/grafana
+          mkdir -p ./infra/prometheus/data
+          mkdir -p ./infra/loki/data
+          mkdir -p ./infra/promtail/data
+          # Garantir que o usuário 472 (Grafana) consiga escrever
+          chmod -R 777 ./infra/grafana
+          chmod -R 777 ./infra/prometheus/data
+          chmod -R 777 ./infra/loki/data
+          chmod -R 777 ./infra/promtail/data
         
       - name: Create Docker network tasknet
         run: |
@@ -60,27 +75,42 @@ jobs:
           # aguarda os serviços ficarem saudáveis
           sleep 20
 
-      - name: Wait for infra containers to be healthy
+      - name: Wait for infra services to be ready
         run: |
-          echo "Verificando healthchecks dos containers..."
+          echo "Aguardando que os serviços da infraestrutura fiquem saudáveis..."
           max_attempts=30
-          attempt=1
-          while [ $attempt -le $max_attempts ]; do
-            # Lista containers do compose e verifica status de health
-            unhealthy=$(docker compose -f infra/docker-compose-infra.yml ps -q |
-              xargs docker inspect -f '{{.Name}} {{.State.Health.Status}}' |
-              grep -v "healthy" || true)
-            if [ -z "$unhealthy" ]; then
-              echo "✅ Todos os containers estão healthy."
-              exit 0
+          sleep_interval=5
+          services=(prometheus grafana loki alertmanager promtail)
+          for service in "${services[@]}"; do
+            echo "Verificando $service..."
+            attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              case $service in
+                prometheus)   url="http://localhost:9090/-/ready"   ;;
+                grafana)      url="http://localhost:3000/api/health" ;;
+                loki)         url="http://localhost:3100/ready"      ;;
+                alertmanager) url="http://localhost:9093/-/ready"    ;;
+                promtail)     url="http://localhost:9080/ready"      ;;
+              esac
+              # Usa wget dentro do container (todos os images possuem wget ou curl). Se falhar, tenta novamente.
+              if docker exec $service wget -qO- $url > /dev/null 2>&1; then
+                echo "✅ $service está pronto."
+                break
+              else
+                echo "⏳ Tentativa $attempt/$max_attempts – $service ainda não respondeu."
+                attempt=$((attempt + 1))
+                sleep $sleep_interval
+              fi
+            done
+            if [ $attempt -gt $max_attempts ]; then
+              echo "❌ $service não ficou pronto a tempo. Exibindo logs para diagnóstico:"
+              docker logs $service || true
+              exit 1
             fi
-            echo "⏳ Tentativa $attempt/$max_attempts – containers não saudáveis ainda:"
-            echo "$unhealthy"
-            attempt=$((attempt + 1))
-            sleep 5
           done
-          echo "❌ Alguns containers não ficaram healthy a tempo."
-          exit 1
+          echo "✅ Todos os serviços da infra estão saudáveis."
+          echo "Listando containers em execução:"
+          docker ps -a
 
       - name: List running containers (debug)
         run: docker ps -a
@@ -91,22 +121,24 @@ jobs:
       - name: Healthcheck Prometheus (inside container)
         run: |
           echo "Verificando health endpoint do Prometheus dentro do container..."
-          docker exec prometheus curl -fsSL http://localhost:9090/-/healthy
+          # O image prom/prometheus não inclui curl; usamos wget que está disponível.
+          docker exec prometheus wget -qO- http://localhost:9090/-/ready
 
       - name: Healthcheck Grafana (inside container)
         run: |
           echo "Verificando health endpoint do Grafana dentro do container..."
-          docker exec grafana curl -fsSL http://localhost:3000/api/health
+          # Grafana possui wget; usamos para garantir compatibilidade.
+          docker exec grafana wget -qO- http://localhost:3000/api/health
 
       - name: Healthcheck Loki (inside container)
         run: |
           echo "Verificando ready endpoint do Loki dentro do container..."
-          docker exec loki curl -fsSL http://localhost:3100/ready
+          docker exec loki wget -qO- http://localhost:3100/ready
 
       - name: Healthcheck Alertmanager (inside container)
         run: |
           echo "Verificando status do Alertmanager dentro do container..."
-          docker exec alertmanager curl -fsSL http://localhost:9093/api/v2/status
+          docker exec alertmanager wget -qO- http://localhost:9093/api/v2/status
 
       # -------------------------------------------------
       # 2️⃣ Verificar integração Prometheus ↔ Alertmanager
