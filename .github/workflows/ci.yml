@@ -45,6 +45,7 @@ jobs:
     name: Infraestrutura de Observabilidade
     needs: lint_commit
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -83,11 +84,6 @@ jobs:
 
       - name: List running containers (debug)
         run: docker ps -a
-        
-      - name: Tear down infra
-        if: always()
-        run: |
-          docker compose -f infra/docker-compose-infra.yml down -v
 
   # ---------------------------------------------------------------------
   # Testes (Pytest)
@@ -200,6 +196,7 @@ jobs:
     name: Build and Push Docker Image
     needs: [test, bandit, dependency_check]
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -224,7 +221,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image to GHCR
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -241,18 +237,17 @@ jobs:
     name: ZAP Dynamic Security Testing
     needs: build_image
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Prepare Variables and Login
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Start application container for ZAP scan
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
           docker run -d --name zap_target --network=host \
           -e DATABASE_URL="sqlite:////tmp/site.db" \
@@ -260,7 +255,6 @@ jobs:
           ghcr.io/${{ env.REPO }}:latest
 
       - name: Wait for application to be ready
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
           echo "Aguardando o Flask iniciar na porta 5000..."
           for i in {1..20}; do
@@ -278,7 +272,6 @@ jobs:
           exit 1
 
       - name: Run OWASP ZAP baseline scan
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: zaproxy/action-baseline@v0.14.0
         with:
           target: http://localhost:5000
@@ -301,25 +294,27 @@ jobs:
   # ---------------------------------------------------------------------
   deploy_review:
     name: Deploy-Review
-    needs: zap_scan
+    needs: [zap_scan, infra]
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         
       - name: Prepare Variables and Login
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Deploy review environment
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          docker run -d --name review_app -p 8080:5000 ghcr.io/${{ env.REPO }}:latest
+          docker run -d \
+            --name task_manager_flask \
+            --network tasknet \
+            -p 8080:5000 \
+            ghcr.io/${{ env.REPO }}:latest
           
       - name: Environment Details
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
           echo "Ambiente de review disponível na porta 8080 do runner."
           echo "Aguardando verificações..."
@@ -327,4 +322,9 @@ jobs:
       - name: Stop review environment container
         if: always()
         run: |
-            docker rm -f review_app
+            docker rm -f task_manager_flask
+            
+      - name: Tear down infra after review
+        if: always()
+        run: |
+          docker compose -f infra/docker-compose-infra.yml down -v
