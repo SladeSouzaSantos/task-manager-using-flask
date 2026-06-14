@@ -4,7 +4,6 @@ on:
   push:
   pull_request:
 
-# CONCEDE PERMISSÃO GLOBAL PARA GRAVAR NO GHCR E LER O CÓDIGO
 permissions:
   contents: read
   packages: write
@@ -49,6 +48,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        
+      - name: Create Docker network tasknet
+        run: |
+          docker network create tasknet || true
 
       - name: Set up Docker Compose and start infra
         run: |
@@ -137,7 +140,6 @@ jobs:
   # ---------------------------------------------------------------------
   dependency_check:
     name: OWASP Dependency-Check
-    # Também pode ser executado em paralelo com os testes e o Bandit.
     needs: lint_commit
     runs-on: ubuntu-latest
     steps:
@@ -151,8 +153,6 @@ jobs:
           key: ${{ runner.os }}-odc-data-v2
           restore-keys: |
             ${{ runner.os }}-odc-data-v2
-          # ISSO É OURO: Garante que o banco de dados será salvo no cache
-          # mesmo se o report falhar ou se achar uma vulnerabilidade!
           save-always: true 
 
       - name: Run OWASP Dependency-Check (Docker)
@@ -203,8 +203,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # CORREÇÃO: Transforma dono/repositório em minúsculas para o Docker não quebrar
+        
       - name: Set lowercase repository name
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
@@ -307,8 +306,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # CORREÇÃO: Variável minúscula e Login no novo Job
+        
       - name: Prepare Variables and Login
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
@@ -319,8 +317,7 @@ jobs:
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
           docker run -d --name review_app -p 8080:5000 ghcr.io/${{ env.REPO }}:latest
-
-      # CORREÇÃO: Removido o auto-approve bot. Apenas simula a espera do ambiente de stage.
+          
       - name: Environment Details
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
