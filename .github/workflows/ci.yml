@@ -85,6 +85,84 @@ jobs:
       - name: List running containers (debug)
         run: docker ps -a
 
+      # -------------------------------------------------
+      # 1️⃣ Healthchecks básicos de cada serviço
+      # -------------------------------------------------
+      - name: Healthcheck Prometheus
+        run: |
+          echo "Verificando health endpoint do Prometheus..."
+          curl -fsSL http://prometheus:9090/-/healthy
+
+      - name: Healthcheck Grafana
+        run: |
+          echo "Verificando health endpoint do Grafana..."
+          curl -fsSL http://grafana:3000/api/health
+
+      - name: Healthcheck Loki
+        run: |
+          echo "Verificando ready endpoint do Loki..."
+          curl -fsSL http://loki:3100/ready
+
+      - name: Healthcheck Alertmanager
+        run: |
+          echo "Verificando status do Alertmanager..."
+          curl -fsSL http://alertmanager:9093/api/v2/status
+
+      # -------------------------------------------------
+      # 2️⃣ Verificar integração Prometheus ↔ Alertmanager
+      # -------------------------------------------------
+      - name: Verify Prometheus sees Alertmanager
+        run: |
+          echo "Consultando Prometheus para listar Alertmanagers..."
+          curl -s http://prometheus:9090/api/v1/alertmanagers | jq .
+
+      # -------------------------------------------------
+      # 3️⃣ Verificar datasources do Grafana (Prometheus & Loki)
+      # -------------------------------------------------
+      - name: Get Grafana admin token
+        id: grafana_token
+        run: |
+          # Usuário e senha padrão (admin/admin) – ajuste se houver customização
+          token=$(curl -s -X POST http://grafana:3000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"user":"admin","password":"admin"}' | jq -r .key)
+          echo "token=$token" >> $GITHUB_OUTPUT
+
+      - name: Verify Grafana datasource Prometheus
+        run: |
+          echo "Listando datasource Prometheus no Grafana..."
+          curl -s -H "Authorization: Bearer ${{ steps.grafana_token.outputs.token }}" \
+            http://grafana:3000/api/datasources | \
+            jq '.[] | select(.type=="prometheus")'
+
+      - name: Verify Grafana datasource Loki
+        run: |
+          echo "Listando datasource Loki no Grafana..."
+          curl -s -H "Authorization: Bearer ${{ steps.grafana_token.outputs.token }}" \
+            http://grafana:3000/api/datasources | \
+            jq '.[] | select(.type=="loki")'
+
+      # -------------------------------------------------
+      # 4️⃣ Verificar Promtail → Loki (log de teste)
+      # -------------------------------------------------
+      - name: Emit test log for Promtail
+        run: |
+          # Cria um arquivo de log que o Promtail está configurado para monitorar.
+          # O caminho abaixo assume que o volume /var/log/promtail está mapeado.
+          LOG_DIR=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/log/promtail"}}{{.Source}}{{end}}{{end}}' promtail)
+          if [ -z "$LOG_DIR" ]; then
+            echo "Diretório de logs do Promtail não encontrado – pulando teste de log."
+          else
+            echo "test-log-from-promtail-$(date +%s)" >> "$LOG_DIR/test.log"
+          fi
+
+      - name: Query Loki for test log
+        run: |
+          echo "Consultando Loki para verificar se o log de teste chegou..."
+          # Aguarda alguns segundos para o Promtail enviar o log
+          sleep 5
+          curl -s "http://loki:3100/loki/api/v1/query_range?query=%22test-log-from-promtail%22&limit=5&direction=BACKWARD" | jq .
+
   # ---------------------------------------------------------------------
   # Testes (Pytest)
   # ---------------------------------------------------------------------
