@@ -78,7 +78,7 @@ jobs:
       - name: Wait for infra services to be ready
         run: |
           echo "Aguardando que os serviços da infraestrutura fiquem saudáveis..."
-          max_attempts=30
+          max_attempts=60
           sleep_interval=5
           services=(prometheus grafana loki alertmanager promtail)
           for service in "${services[@]}"; do
