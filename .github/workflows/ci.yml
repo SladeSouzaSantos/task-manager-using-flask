@@ -42,6 +42,53 @@ jobs:
           }
 
   # ---------------------------------------------------------------------
+  # Infraestrutura de observabilidade (Prometheus, Grafana, Loki, Alertmanager)
+  # ---------------------------------------------------------------------
+  infra:
+    name: Infraestrutura de Observabilidade
+    needs: lint_commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose and start infra
+        run: |
+          docker compose -f infra/docker-compose-infra.yml up -d
+          # aguarda os serviços ficarem saudáveis
+          sleep 20
+
+      - name: Wait for infra containers to be healthy
+        run: |
+          echo "Verificando healthchecks dos containers..."
+          max_attempts=30
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            # Lista containers do compose e verifica status de health
+            unhealthy=$(docker compose -f infra/docker-compose-infra.yml ps -q |
+              xargs docker inspect -f '{{.Name}} {{.State.Health.Status}}' |
+              grep -v "healthy" || true)
+            if [ -z "$unhealthy" ]; then
+              echo "✅ Todos os containers estão healthy."
+              exit 0
+            fi
+            echo "⏳ Tentativa $attempt/$max_attempts – containers não saudáveis ainda:"
+            echo "$unhealthy"
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          echo "❌ Alguns containers não ficaram healthy a tempo."
+          exit 1
+
+      - name: List running containers (debug)
+        run: docker ps -a
+        
+      - name: Tear down infra
+        if: always()
+        run: |
+          docker compose -f infra/docker-compose-infra.yml down -v
+
+  # ---------------------------------------------------------------------
   # Testes (Pytest)
   # ---------------------------------------------------------------------
   test:
