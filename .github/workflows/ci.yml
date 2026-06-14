@@ -85,11 +85,6 @@ jobs:
       - name: List running containers (debug)
         run: docker ps -a
 
-      - name: Tear down infra after review
-        if: always()
-        run: |
-          docker compose -f infra/docker-compose-infra.yml down -v
-
   # ---------------------------------------------------------------------
   # Testes (Pytest)
   # ---------------------------------------------------------------------
@@ -299,30 +294,66 @@ jobs:
   # ---------------------------------------------------------------------
   deploy_review:
     name: Deploy-Review
-    needs: zap_scan
+    needs: [build_image, infra]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev'
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        
+      - uses: actions/checkout@v4
+
       - name: Prepare Variables and Login
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      
-      - name: Create Docker network tasknet
-        run: |
-          docker network create tasknet || true
 
-      - name: Deploy review environment
+      - name: Create Docker network tasknet
+        run: docker network create tasknet || true
+
+      - name: Deploy review environment (Flask)
         run: |
           docker run -d \
             --name task_manager_flask \
             --network tasknet \
             -p 8080:5000 \
             ghcr.io/${{ env.REPO }}:latest
-          
+
+      # -------------------------------------------------
+      # 1️⃣ Verifica se a aplicação está up
+      # -------------------------------------------------
+      - name: Check Flask health endpoint
+        run: |
+          echo "Aguardando health endpoint..."
+          for i in {1..15}; do
+            if curl -s http://task_manager_flask:5000/health | grep -i "ok"; then
+              echo "✅ Flask health OK"
+              break
+            fi
+            echo "Tentativa $i/15 – ainda não respondeu"
+            sleep 2
+          done
+
+      # -------------------------------------------------
+      # 2️⃣ Verifica /metrics
+      # -------------------------------------------------
+      - name: Check /metrics endpoint
+        run: |
+          curl -s http://task_manager_flask:5000/metrics | head -n 5
+
+      # -------------------------------------------------
+      # 3️⃣ Consulta Prometheus para ver se o target está up
+      # -------------------------------------------------
+      - name: Verify Prometheus can scrape Flask
+        run: |
+          echo "Consultando Prometheus /api/v1/targets ..."
+          curl -s http://prometheus:9090/api/v1/targets | \
+            jq '.data.activeTargets[] | select(.labels.job=="task_manager_flask")'
+
+      # -------------------------------------------------
+      # 4️⃣ (Opcional) Query simples da métrica `up`
+      # -------------------------------------------------
+      - name: Query Prometheus `up` metric
+        run: |
+          curl -s "http://prometheus:9090/api/v1/query?query=up{job=\"task_manager_flask\"}" | jq .
+
       - name: Environment Details
         run: |
           echo "Ambiente de review disponível na porta 8080 do runner."
@@ -331,4 +362,26 @@ jobs:
       - name: Stop review environment container
         if: always()
         run: |
-            docker rm -f task_manager_flask   
+          docker rm -f task_manager_flask
+
+  # -----------------------------------------------------------------
+  # Job de Finalização
+  # -----------------------------------------------------------------
+  final_cleanup:
+    name: Final Cleanup
+    needs: [zap_scan, deploy_review]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout (necessário só para ter acesso ao repo)
+        uses: actions/checkout@v4
+      - name: Remove containers da infra (caso ainda existam)
+        run: |
+          docker ps -a --filter "name=task_manager_flask" -q | xargs -r docker rm -f
+          docker ps -a --filter "name=zap_target" -q | xargs -r docker rm -f
+      - name: Down infra (remove volumes, rede etc.)
+        run: |
+          docker compose -f infra/docker-compose-infra.yml down -v || true
+          docker network rm tasknet || true
+      - name: Mensagem final
+        run: echo "✅ Pipeline finalizado – limpeza concluída."
