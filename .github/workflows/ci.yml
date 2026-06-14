@@ -78,6 +78,7 @@ jobs:
       - name: Wait for infra services to be ready
         run: |
           echo "Aguardando que os serviços da infraestrutura fiquem saudáveis..."
+          # Número de tentativas e intervalo para garantir que serviços demoram a iniciar.
           max_attempts=60
           sleep_interval=5
           services=(prometheus grafana loki alertmanager promtail)
@@ -92,8 +93,9 @@ jobs:
                 alertmanager) url="http://localhost:9093/-/ready"    ;;
                 promtail)     url="http://localhost:9080/ready"      ;;
               esac
-              # Usa wget dentro do container (todos os images possuem wget ou curl). Se falhar, tenta novamente.
-              if docker exec $service wget -qO- $url > /dev/null 2>&1; then
+              # Primeiro tenta wget (silencioso). Se falhar, tenta curl com falha automática em códigos não-2xx.
+              # Usa curl direto do runner (host) para checar o endpoint exposto.
+              if curl -s -f $url > /dev/null 2>&1; then
                 echo "✅ $service está pronto."
                 break
               else
